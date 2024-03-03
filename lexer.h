@@ -3,12 +3,19 @@
 enum{
 	ID
 	// keywords
-	,TYPE_CHAR
+	,TYPE_CHAR,TYPE_DOUBLE,ELSE,IF,TYPE_INT,
+    RETURN,STRUCT,VOID,WHILE
+    //constants
+    ,INT,DOUBLE,CHAR,STRING
 	// delimiters
-	,COMMA,END
+	,COMMA,END,SEMICOLON,LPAR,RPAR,LBRACKET,
+    RBRACKET,LACC,RACC
 	// operators
-	,ASSIGN,EQUAL
+	,ASSIGN,EQUAL,ADD,SUB,MUL,DIV,DOT,
+    AND,OR,NOT,NOTEQ,LESS,LESSEQ,GREATER,GREATEREQ
 	};
+
+extern char ids[][15];
 
 typedef struct Token{
 	int code;		// ID, TYPE_CHAR, ...
