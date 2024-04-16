@@ -1,0 +1,367 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include "parser.h"
+#include "lexer.h"
+#include "utils.h"
+
+Token *iTk;		// the iterator in the tokens list
+Token *consumedTk;		// the last consumed token
+
+void tkerr(const char *fmt, ...);
+bool unit();
+bool structDef();
+bool varDef();
+bool typeBase();
+bool arrayDecl();
+bool fnDef();
+bool fnParam();
+bool stm();
+bool stmCompound();
+bool expr();
+bool exprAssign();
+bool exprOr();
+bool exprAnd();
+bool exprEq();
+bool exprRel();
+bool exprAdd();
+bool exprMul();
+bool exprCast();
+bool exprUnary();
+bool exprPostfix();
+bool exprPrimary();
+
+//Mesajele de eroare nu ar trebui sa contina componente din gramatica (ex: RACC, SEMICOLO etc) si ele trebuie sa fie cat mai specifice pentru problema aparuta
+//Fisierul se testeaza cu "testParser.c" -> dupa care acolo stergem acolade, ; si vedem daca apar erorile
+
+void tkerr(const char *fmt,...){
+  fprintf(stderr,"error in line %d: ",iTk->line);
+  va_list va;
+  va_start(va,fmt);
+  vfprintf(stderr,fmt,va);
+  va_end(va);
+  fprintf(stderr,"\n");
+  exit(EXIT_FAILURE);
+}
+
+bool consume(int code){
+  if(iTk->code==code){
+    consumedTk=iTk;
+    iTk=iTk->next;
+    return true;
+  }
+  return false;
+}
+
+// unit: ( structDef | fnDef | varDef )* END
+bool unit(){
+  for(;;){
+    if(structDef()){}
+    else if(fnDef()){}
+    else if(varDef()){}
+    else break;
+  }
+  if (consume(END)) {
+    return true;
+  } else tkerr("Syntax error!");
+  return false;
+}
+
+// structDef: STRUCT ID LACC varDef* RACC SEMICOLON
+bool structDef() {
+  Token *start = iTk;
+  if (consume(STRUCT)) {
+    if (consume(ID)) {
+      if (consume(LACC)) {
+	for (;;) {
+	  if (varDef()) {
+	  } else {
+	    break;
+	  }
+	}
+	if (consume(RACC)) {
+	  if (consume(SEMICOLON)) {
+	    return true;
+	  } else tkerr("Missing ; after struct definition!");
+	} else tkerr("Missing '}' in struct definition!");
+      }
+    } else tkerr("Struct has not an identifier!");
+  }
+
+  iTk = start;
+  return false;
+}
+
+//varDef: typeBase ID arrayDecl? SEMICOLON
+bool varDef() {
+  Token *start = iTk;
+  if(typeBase()){
+    if(consume(ID)){
+      if(arrayDecl()){}
+      if(consume(SEMICOLON)){
+	return true;
+      } else tkerr("Expected ; after member definition!");
+    } else tkerr("Expected identifier after variable type!");
+  }
+  iTk = start;
+  return false;
+}
+
+// typeBase: TYPE_INT | TYPE_DOUBLE | TYPE_CHAR | STRUCT ID
+bool typeBase() {
+  Token *start = iTk;
+  if (consume(TYPE_INT)) {
+    return true;
+  }
+  if (consume(TYPE_DOUBLE)) {
+    return true;
+  }
+  if (consume(TYPE_CHAR)) {
+    return true;
+  }
+  if (consume(STRUCT)) {
+    if (consume(ID)) {
+      return true;
+    } else tkerr("Struct has not an identifier!");
+  }
+  iTk = start;
+  return false;
+}
+
+//arrayDecl: LBRACKET INT? RBRACKET
+bool arrayDecl() {
+  Token *start = iTk;
+  if (consume(LBRACKET)) {
+    if (consume(INT)) {}
+    if (consume(RBRACKET)) {
+      return true;
+    } else tkerr("Missing ] after array declaration!");
+  }
+  iTk = start;
+  return false;
+}
+
+//fnDef: ( typeBase | VOID ) ID
+//LPAR ( fnParam ( COMMA fnParam )* )? RPAR
+//stmCompound
+bool fnDef(){
+  Token *start = iTk;
+  if(typeBase()){
+    if(consume(ID)){
+      if(consume(LPAR)){
+	if(fnParam()) {
+	  while (consume(COMMA)) {
+	    if (fnParam()) {}
+	    else tkerr("Missing parameter after , in function's header!");
+	  }
+	}
+	if(consume(RPAR)) {
+	  if(stmCompound()){
+	    return true;
+	  } else tkerr("Expected body for function declared!");
+	} else tkerr("Missing ) in function header!");
+      }
+    } else tkerr("Expected function identifier!");
+  }
+
+  if(consume(VOID)) {
+    if (consume(ID)) {
+      if (consume(LPAR)) {
+	if (fnParam()) {
+	  while (consume(COMMA)) {
+	    if (fnParam()) {}
+	    else tkerr("Missing parameter after , in function's header!");
+	  }
+	}
+	if (consume(RPAR)) {
+	  if (stmCompound()) {
+	    return true;
+	  } else tkerr("Expected body for function declared!");
+	} else tkerr("Missing ) in function header!");
+      }
+    } else tkerr("Expected function identifier!");
+  }
+  iTk = start;
+  return false;
+}
+
+//fnParam: typeBase ID arrayDecl?
+bool fnParam(){
+  Token *start = iTk;
+  if(typeBase()){
+    if(consume(ID)){
+      if(arrayDecl()){}
+      return true;
+    } else tkerr("Missing parameter name!");
+  }
+  iTk = start;
+  return false;
+}
+
+//stm: stmCompound
+//| IF LPAR expr RPAR stm ( ELSE stm )?
+//| WHILE LPAR expr RPAR stm
+//| RETURN expr? SEMICOLON
+//| expr? SEMICOLON
+bool stm(){
+  Token *start = iTk;
+  if(stmCompound())
+    {   return true;
+    }
+  if(consume(IF)){
+    if(consume(LPAR)){
+      if(expr()){
+	if(consume(RPAR)){
+	  if(stm()){
+	    if(consume(ELSE)) {
+	      if (stm()) {}
+	      else tkerr("Expected statement after ELSE!");
+	    }
+	    return true;
+	  } else tkerr("Expected statement after IF!");
+	} else tkerr("Missing ) after expression!");
+      } else tkerr("Expected expression!");
+    } else tkerr("Expected ( after IF!");
+  }
+  if(consume(WHILE)){
+    if(consume(LPAR)){
+      if(expr()){
+	if(consume(RPAR)){
+	  if(stm()){
+	    return true;
+	  } else tkerr("Expected statement after WHILE!");
+	} else tkerr("Missing ) after expression!");
+      }
+    } else tkerr("Expected expression between ()!");
+  }
+  if(consume(RETURN)){
+    if(expr()){}
+    if(consume(SEMICOLON)){
+      return true;
+    } else tkerr("Missing ; after RETURN!");
+  }
+  if(expr()) {
+    if (consume(SEMICOLON)) {
+      return true;
+    } else tkerr("Expected ; after expression!");
+  }
+  if (consume(SEMICOLON))
+    return true;
+
+  iTk = start;
+  return false;
+}
+
+//stmCompound: LACC ( varDef | stm )* RACC
+bool stmCompound(){
+  Token *start = iTk;
+  if(consume(LACC)){
+    for(;;){
+      if(varDef()){
+      } else if (stm()){
+      } else {
+	break;
+      }
+    }
+    if(consume(RACC)){
+      return true;
+    } else tkerr("Missing } after function block!");
+  }
+  iTk = start;
+  return false;
+}
+
+//expr: exprAssign
+bool expr(){
+  Token *start = iTk;
+  if(exprAssign()){
+    return true;
+  }
+  iTk = start;
+  return false;
+}
+
+//exprAssign: exprUnary ASSIGN exprAssign | exprOr
+// a;
+bool exprAssign(){
+  Token *start = iTk;
+  if(exprUnary()){
+    if(consume(ASSIGN)){
+      if(exprAssign()){
+	return true;
+      } else tkerr("Expected expression after = !");
+    }
+  }
+  iTk = start;
+  if(exprOr()){
+    return true;
+  }
+  iTk = start;
+  return false;
+}
+
+// exprOr: exprOr OR exprAnd | exprAnd
+bool exprOrPrim() {
+  Token *start = iTk;
+  if (consume(OR)) {
+    if (exprAnd()) {
+      if (exprOrPrim()) {
+	return true;
+      }
+    } else tkerr("Invalid expression after || !");
+  }
+  iTk = start;
+  return true;
+}
+
+bool exprOr() {
+    Token *start = iTk;
+    if (exprAnd()) {
+        if (exprOrPrim()) {
+            return true;
+        }
+    }
+    iTk = start;
+    return false;
+}
+
+//exprAndPrim: AND exprEq exprAndPrim | epsilon <=> (AND exprEq exprAndPrim)?
+bool exprAndPrim(){
+    Token *start = iTk;
+    if(consume(AND)){
+        if(exprEq()){
+            if(exprAndPrim()){
+                return true;
+            }
+        }
+        else tkerr("Invalid expression after && !");
+    }
+    iTk = start;
+    return true;
+}
+
+//exprAnd: exprAnd AND exprEq | exprEq
+//exprAnd: exprEq exprAndPrim
+bool exprAnd(){
+    Token *start = iTk;
+    if(exprEq()){
+        if(exprAndPrim()){
+            return true;
+        }
+    }
+    iTk = start;
+    return false;
+}
+
+//exprEq: exprEq ( EQUAL | NOTEQ ) exprRel | exprRel
+//exprEq: exprRel exprEqPrim
+bool exprEq(){}
+
+//exprUnary: ( SUB | NOT ) exprUnary | exprPostfix
+bool exprUnary(){}
+
+void parse(Token *tokens){
+  iTk=tokens;
+  if(!unit())tkerr("syntax error");
+}

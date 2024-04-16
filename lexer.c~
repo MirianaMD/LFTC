@@ -12,7 +12,7 @@ Token *lastTk;  // the last token in list
 int line=1;		// the current line in the input file
 
 char ids[38][15] = { "ID",
-		     "TYPE_CHAR","TYPE_DOUBLE","ELSE", "IF","TYPE_INT",
+		             "TYPE_CHAR","TYPE_DOUBLE","ELSE", "IF","TYPE_INT",
                      "RETURN", "STRUCT", "VOID", "WHILE",
                      "INT", "DOUBLE", "CHAR", "STRING",
                      "COMMA", "END", "SEMICOLON", "LPAR", "RPAR", "LBRACKET",
@@ -39,7 +39,7 @@ Token *addTk(int code){
 
 char *extract(const char *begin,const char *end){
   //err("extract needs to be implemented");
-  char* rez = safeAlloc(end-begin+1);
+  char* rez = dinamAlloc(end-begin+1);
   int i=0;
   while(begin!=end){
     rez[i++]=*begin;
@@ -56,7 +56,7 @@ Token *tokenize(const char *pch){
   for(;;){
     switch(*pch){
     case ' ':case '\t':pch++;break;
-    case '\r': //handles different kinds of newlines (Windows: \r\n, Linux: \n, MacOS, OS X: \r or \n)
+    case '\r': // handles different kinds of newlines (Windows: \r\n, Linux: \n, MacOS, OS X: \r or \n)
       if(pch[1]=='\n')pch++;
       // fallthrough to \n
     case '\n':
@@ -90,6 +90,7 @@ Token *tokenize(const char *pch){
 	  pch++;
 	}
       char *text=extract(start,pch);
+      printf("ok: %s\n",text);
       tk=addTk(STRING);
       tk->text=text;
       pch++;
@@ -112,9 +113,9 @@ Token *tokenize(const char *pch){
     case '*':addTk(MUL);pch++;break;
     case '/':
       if(pch[1]=='/')//daca avem comentariu
-	{
+      {
           for(start=pch++;*pch!='\n';pch++){}
-	}else{
+      }else{
 	addTk(DIV);
 	pch++;
       }
@@ -197,28 +198,28 @@ Token *tokenize(const char *pch){
 	int isInt = 1; //daca vom avea int punem 1, daca nu, punem 0 pt double
 	while(isdigit(*pch)) pch++;
 	if(*pch=='.') //avem double
+	{
+	  isInt = 0;
+	  pch++;
+	  int valid=0;// 1 daca e nr real corespunzator, fara spatii dupa punct sau alte caractere care nu ar trebui sa fie
+	  while (isdigit(*pch))
 	  {
-	    isInt = 0;
-	    pch++;
-	    int valid=0;// 1 daca e nr real corespunzator, fara spatii dupa punct sau alte caractere care nu ar trebui sa fie
-	    while (isdigit(*pch))
-	      {
-		pch++;
-		valid=1;
-	      }
-	    if(valid==0)
-	      {
-		err("Invalid character: double invalid! Linia: %d", line);
-	      }
+	      pch++;
+	      valid=1;
 	  }
+	  if(valid==0)
+	  {
+	      err("Invalid character: double invalid! Linia: %d", line);
+	  }
+	}
 	if('e'==*pch || 'E'==*pch) {
 	  isInt = 0;
 	  pch++;
-	  if('+'==*pch || '-'==*pch) pch++;//vom avea nevoie de digit dupa +/-
+	  if('+'==*pch || '-'==*pch) pch++; //vom avea nevoie de digit dupa +/-
 	  if(!isdigit(*pch)) 
-	    {
+	  {
 	      err("Invalid double: %s, linia %d\n", extract(start,pch),line);
-	    }
+	  }
 	  while (isdigit(*pch)) pch++;
 	}
 	char* number = extract(start,pch);

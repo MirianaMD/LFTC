@@ -3,13 +3,15 @@
 
 #include "lexer.h"
 #include "utils.h"
+#include "parser.h"
 
 int main()
 {
-    char *inbuf=loadFile("tests/testlex.c");
-    //puts(inbuf);
-    Token *tokens=tokenize(inbuf);
-    free(inbuf);
-    showTokens(tokens);
-    return 0;
+  //char *inbuf=loadFile("tests/testlex.c");
+  char* inbuf=loadFile("tests/testparser.c");
+  //puts(inbuf); //de aici afiseaza testparser.c
+  Token* parselist = tokenize(inbuf);
+  showTokens(parselist);
+  parse(parselist);
+  return 0;
 }
